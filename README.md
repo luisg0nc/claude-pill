@@ -1,5 +1,7 @@
 # Claude Pill
 
+<img width="270" height="193" alt="image" src="https://github.com/user-attachments/assets/7ca50cb1-bb24-4fde-939f-685be5f1ac59" />
+
 A small Quickshell bar widget that surfaces Claude Code's session and weekly usage percentages. Like having `/status` always visible on your bar. Built for Hyprland on top of the end-4 / illogical-impulse dotfiles.
 
 ## What it shows
