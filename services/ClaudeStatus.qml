@@ -36,6 +36,11 @@ Singleton {
     property string rateLimitTier: ""
     property real expiresAt: 0  // ms epoch
     property bool tokenExpired: false
+    // Last accessToken we've seen. The Claude CLI rotates the OAuth token near
+    // expiry, writing a new accessToken here; detecting that change lets us
+    // re-poll immediately instead of sitting in the auth state until the next
+    // timer tick.
+    property string _lastAccessToken: ""
 
     // ── Live limits (from /api/oauth/usage) ─────────────────────────────
     property real sessionUsedPct: -1   // five_hour.utilization (0..100). -1 = not yet known
@@ -61,10 +66,27 @@ Singleton {
             root.subscriptionType = j.subscriptionType ?? "";
             root.rateLimitTier = j.rateLimitTier ?? "";
             root.expiresAt = Number(j.expiresAt) || 0;
-            // tokenExpired flips true on 401 from poll, OR if expiresAt has passed locally
-            if (root.expiresAt > 0 && Date.now() > root.expiresAt) {
+
+            const newToken = j.accessToken ?? "";
+            const tokenChanged = newToken.length > 0 && newToken !== root._lastAccessToken;
+            const locallyExpired = root.expiresAt > 0 && Date.now() > root.expiresAt;
+
+            if (locallyExpired) {
+                // Token past its expiry and the CLI hasn't refreshed it yet.
                 root.tokenExpired = true;
+            } else if (tokenChanged && root._lastAccessToken.length > 0) {
+                // A fresh, unexpired token just landed — the CLI rotated it.
+                // Clear the stale auth-failure state and re-poll right away so
+                // the pill recovers in seconds instead of waiting out the timer
+                // interval. refresh()'s hard floor keeps this from storming.
+                root.tokenExpired = false;
+                if (root.lastError.startsWith("401") || root.lastError === "no token")
+                    root.lastError = "";
+                if (root._initialFetchDone)
+                    root.refresh(true);
             }
+            if (tokenChanged)
+                root._lastAccessToken = newToken;
         } catch (e) {
             console.warn(`[ClaudeStatus] credentials parse failed: ${e.message}`);
         }
